@@ -1,0 +1,8 @@
+chromadb
+google-genai
+python-dotenv
+fastapi
+uvicorn
+streamlit
+psycopg2-binary
+sqlalchemy
