@@ -31,7 +31,7 @@ load_dotenv()
 API_KEY = os.getenv("GEMINI_API_KEY")
 _client = genai.Client(api_key=API_KEY) if API_KEY else None
 
-SYNTHESIS_MODEL = "gemini-2.0-flash"  # fast + cheap, good enough for structured synthesis
+SYNTHESIS_MODEL = "gemini-3.6-flash"  # fast + cheap, good enough for structured synthesis
 
 
 SYNTHESIS_PROMPT_TEMPLATE = """You are an AI assistant for Coursera's content team. Your job is to
