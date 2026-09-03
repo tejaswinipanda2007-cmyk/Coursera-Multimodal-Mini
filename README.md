@@ -254,11 +254,11 @@ Swagger UI: https://coursera-multimodal-mini.onrender.com/docs
 
 > What concepts are learners struggling with the most?
 
-> Explain the information shown in this image.
+> Where are learners struggling the most in Week 1?
 
-> Summarize the important points from this document.
+> Which quiz questions have the lowest completion or highest failure rate?
 
-> What evidence supports this answer?
+> What are the main student complaints in the discussion forum?
 
 ---
 
