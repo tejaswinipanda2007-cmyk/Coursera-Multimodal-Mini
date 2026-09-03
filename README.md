@@ -6,7 +6,7 @@ A production-ready Multimodal Retrieval-Augmented Generation (RAG) and Evaluatio
 
 ## 🌐 Live Deployments
 
-- Frontend Application (Streamlit Cloud): https://tejaswinipanda2007-cmyk-coursera-multimodal-mini.streamlit.app
+- Frontend Application (Streamlit Cloud): https://coursera-multimodal-mini-pw8grrooksyszb9wj9hmq9.streamlit.app
 - Backend API (Render): https://coursera-multimodal-mini.onrender.com
 - Interactive API Docs (Swagger UI): https://coursera-multimodal-mini.onrender.com/docs
 
@@ -179,7 +179,8 @@ Coursera-Multimodal-Mini/
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/tejaswinipanda2007-cmyk/Coursera-Multimodal-Mini.git](https://github.com/tejaswinipanda2007-cmyk/Coursera-Multimodal-Mini.git)
+git clone [https://github.com/tejaswinipanda2007-cmyk/Coursera-Multimodal-Mini.git]
+(https://github.com/tejaswinipanda2007-cmyk/Coursera-Multimodal-Mini.git)
 cd Coursera-Multimodal-Mini
 ```
 
