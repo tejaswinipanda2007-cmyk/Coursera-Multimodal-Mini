@@ -1,22 +1,30 @@
 """
 LLM Synthesis Layer
---------------------
+-------------------
 
-Takes retrieved evidence and asks Gemini to generate a grounded insight.
+Generates grounded insights from retrieved evidence.
 
-Important:
-- Gemini can ONLY use the retrieved evidence.
-- Every claim should be traceable to evidence.
-- Output is expected as JSON.
-- Weak or missing evidence should result in low confidence.
-- The implementation is intentionally defensive so API/model output
-  does not crash the FastAPI backend.
+Primary model:
+    gemini-3.5-flash
+
+Fallback model:
+    gemini-3.5-flash-lite
+
+The system retries temporary Gemini errors such as:
+    429 - rate limit
+    500 - server error
+    502 - bad gateway
+    503 - unavailable
+    504 - timeout
+
+If the primary model remains unavailable, it automatically tries
+the fallback model.
 """
 
 import sys
 import os
 import json
-from typing import Any
+import time
 
 from google import genai
 from dotenv import load_dotenv
@@ -47,10 +55,16 @@ _client = genai.Client(api_key=API_KEY) if API_KEY else None
 
 
 # -------------------------------------------------------------------
-# GEMINI MODEL
+# GEMINI MODELS
 # -------------------------------------------------------------------
 
-SYNTHESIS_MODEL = "gemini-3.5-flash"
+PRIMARY_MODEL = "gemini-3.5-flash"
+FALLBACK_MODEL = "gemini-3.5-flash-lite"
+
+# Keep this variable for compatibility with the rest of the project.
+SYNTHESIS_MODEL = PRIMARY_MODEL
+
+MAX_RETRIES = 3
 
 
 # -------------------------------------------------------------------
@@ -98,13 +112,11 @@ Return exactly this JSON structure:
 
 
 # -------------------------------------------------------------------
-# EVIDENCE FORMATTER
+# FORMAT EVIDENCE
 # -------------------------------------------------------------------
 
 def _format_evidence_block(evidence: list[dict]) -> str:
-    """
-    Convert retrieved evidence into a readable prompt block.
-    """
+    """Convert retrieved evidence into a readable prompt block."""
 
     lines = []
 
@@ -124,25 +136,20 @@ def _format_evidence_block(evidence: list[dict]) -> str:
         lines.append(
             f"- [{segment_id}] "
             f"({modality}{timestamp_text}, "
-            f"from '{source_title}'): "
-            f"{text}"
+            f"from '{source_title}'): {text}"
         )
 
     return "\n".join(lines)
 
 
 # -------------------------------------------------------------------
-# SAFE JSON EXTRACTION
+# EXTRACT JSON
 # -------------------------------------------------------------------
 
 def _extract_json(text: str) -> dict:
     """
     Safely extract a JSON object from Gemini output.
-
-    Handles:
-    - normal JSON
-    - ```json ... ``` output
-    - extra text surrounding JSON
+    Handles normal JSON, markdown fences, and extra text.
     """
 
     if not text:
@@ -150,15 +157,17 @@ def _extract_json(text: str) -> dict:
 
     cleaned = text.strip()
 
-    # Remove markdown fences if present
+    # Remove markdown fences
     if cleaned.startswith("```"):
+
         cleaned = cleaned.replace("```json", "", 1)
         cleaned = cleaned.replace("```JSON", "", 1)
         cleaned = cleaned.replace("```", "", 1)
         cleaned = cleaned.strip()
 
-    # First attempt: direct JSON parsing
+    # Direct JSON parsing
     try:
+
         result = json.loads(cleaned)
 
         if isinstance(result, dict):
@@ -167,16 +176,19 @@ def _extract_json(text: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # Second attempt:
-    # Extract everything between first { and last }
+    # Try extracting JSON object from surrounding text
     first_brace = cleaned.find("{")
     last_brace = cleaned.rfind("}")
 
     if first_brace != -1 and last_brace != -1:
-        json_candidate = cleaned[first_brace:last_brace + 1]
+
+        candidate = cleaned[
+            first_brace:last_brace + 1
+        ]
 
         try:
-            result = json.loads(json_candidate)
+
+            result = json.loads(candidate)
 
             if isinstance(result, dict):
                 return result
@@ -184,21 +196,20 @@ def _extract_json(text: str) -> dict:
         except json.JSONDecodeError:
             pass
 
-    raise ValueError("Gemini response was not valid JSON.")
+    raise ValueError(
+        "Gemini response was not valid JSON."
+    )
 
 
 # -------------------------------------------------------------------
-# RESULT NORMALIZER
+# NORMALIZE RESULT
 # -------------------------------------------------------------------
 
 def _normalize_result(
     result: dict,
     evidence: list[dict]
 ) -> dict:
-    """
-    Make sure the returned result always follows the application's
-    expected structure.
-    """
+    """Ensure the result follows the application's expected schema."""
 
     valid_segment_ids = {
         str(e.get("segment_id"))
@@ -208,10 +219,16 @@ def _normalize_result(
 
     insight = result.get("insight")
 
-    evidence_used = result.get("evidence_used", [])
+    evidence_used = result.get(
+        "evidence_used",
+        []
+    )
 
     confidence = str(
-        result.get("confidence", "low")
+        result.get(
+            "confidence",
+            "low"
+        )
     ).lower().strip()
 
     confidence_reason = result.get(
@@ -219,36 +236,44 @@ def _normalize_result(
         "Confidence could not be determined reliably."
     )
 
-    recommendation = result.get("recommendation")
+    recommendation = result.get(
+        "recommendation"
+    )
 
-    # Make sure evidence_used is a list
+    # Ensure evidence_used is a list
     if not isinstance(evidence_used, list):
         evidence_used = []
 
-    # Keep only evidence IDs that actually exist
+    # Keep only real segment IDs
     evidence_used = [
         str(segment_id)
         for segment_id in evidence_used
         if str(segment_id) in valid_segment_ids
     ]
 
-    # Valid confidence values only
-    if confidence not in {"high", "medium", "low"}:
+    # Validate confidence
+    if confidence not in {
+        "high",
+        "medium",
+        "low"
+    }:
         confidence = "low"
 
-    # If Gemini claims high confidence but did not cite evidence,
-    # downgrade it.
+    # No evidence citation = low confidence
     if not evidence_used:
         confidence = "low"
 
-    # Ensure strings are returned
     if insight is not None:
         insight = str(insight).strip()
 
-    confidence_reason = str(confidence_reason).strip()
+    confidence_reason = str(
+        confidence_reason
+    ).strip()
 
     if recommendation is not None:
-        recommendation = str(recommendation).strip()
+        recommendation = str(
+            recommendation
+        ).strip()
 
     return {
         "insight": insight,
@@ -260,6 +285,115 @@ def _normalize_result(
 
 
 # -------------------------------------------------------------------
+# CHECK WHETHER ERROR IS TEMPORARY
+# -------------------------------------------------------------------
+
+def _is_retryable_error(exc: Exception) -> bool:
+    """
+    Detect temporary Gemini/API errors where retrying makes sense.
+    """
+
+    status_code = getattr(
+        exc,
+        "status_code",
+        None
+    )
+
+    if status_code in {
+        429,
+        500,
+        502,
+        503,
+        504
+    }:
+        return True
+
+    error_text = str(exc).lower()
+
+    retry_keywords = [
+        "429",
+        "500",
+        "502",
+        "503",
+        "504",
+        "unavailable",
+        "temporarily",
+        "overloaded",
+        "high demand",
+        "timeout",
+        "rate limit",
+        "resource exhausted",
+    ]
+
+    return any(
+        keyword in error_text
+        for keyword in retry_keywords
+    )
+
+
+# -------------------------------------------------------------------
+# CALL GEMINI WITH RETRIES
+# -------------------------------------------------------------------
+
+def _generate_with_retry(
+    model: str,
+    prompt: str
+):
+    """
+    Call Gemini with retries for temporary failures.
+    """
+
+    last_error = None
+
+    for attempt in range(1, MAX_RETRIES + 1):
+
+        try:
+
+            print(
+                f"Gemini request: "
+                f"{model} "
+                f"(attempt {attempt}/{MAX_RETRIES})"
+            )
+
+            response = _client.models.generate_content(
+                model=model,
+                contents=prompt,
+            )
+
+            return response
+
+        except Exception as exc:
+
+            last_error = exc
+
+            print(
+                f"Gemini error on {model}: {exc}"
+            )
+
+            # Don't retry permanent errors
+            if not _is_retryable_error(exc):
+                raise
+
+            # Wait before retrying
+            if attempt < MAX_RETRIES:
+
+                wait_seconds = attempt * 2
+
+                print(
+                    f"Retrying in "
+                    f"{wait_seconds} seconds..."
+                )
+
+                time.sleep(wait_seconds)
+
+    raise RuntimeError(
+        f"Gemini model '{model}' failed "
+        f"after {MAX_RETRIES} attempts: "
+        f"{last_error}"
+    )
+
+
+# -------------------------------------------------------------------
 # MAIN SYNTHESIS FUNCTION
 # -------------------------------------------------------------------
 
@@ -268,29 +402,17 @@ def synthesize_insight(
     evidence: list[dict]
 ) -> dict:
     """
-    Generate a grounded insight using Gemini.
+    Generate a grounded insight from retrieved evidence.
 
-    Parameters
-    ----------
-    query:
-        User's question.
+    Primary:
+        gemini-3.5-flash
 
-    evidence:
-        Retrieved evidence from the vector database.
-
-    Returns
-    -------
-    dict:
-        Structured insight containing:
-        - insight
-        - evidence_used
-        - confidence
-        - confidence_reason
-        - recommendation
+    Fallback:
+        gemini-3.5-flash-lite
     """
 
     # ---------------------------------------------------------------
-    # Validate Gemini configuration
+    # API KEY CHECK
     # ---------------------------------------------------------------
 
     if not _client:
@@ -301,7 +423,7 @@ def synthesize_insight(
         )
 
     # ---------------------------------------------------------------
-    # Validate query
+    # QUERY CHECK
     # ---------------------------------------------------------------
 
     if not query or not query.strip():
@@ -311,7 +433,7 @@ def synthesize_insight(
         )
 
     # ---------------------------------------------------------------
-    # Handle no evidence
+    # EVIDENCE CHECK
     # ---------------------------------------------------------------
 
     if not evidence:
@@ -328,13 +450,15 @@ def synthesize_insight(
         }
 
     # ---------------------------------------------------------------
-    # Format evidence
+    # FORMAT EVIDENCE
     # ---------------------------------------------------------------
 
-    evidence_block = _format_evidence_block(evidence)
+    evidence_block = _format_evidence_block(
+        evidence
+    )
 
     # ---------------------------------------------------------------
-    # Build prompt
+    # BUILD PROMPT
     # ---------------------------------------------------------------
 
     prompt = SYNTHESIS_PROMPT_TEMPLATE.format(
@@ -343,24 +467,56 @@ def synthesize_insight(
     )
 
     # ---------------------------------------------------------------
-    # Call Gemini
+    # PRIMARY MODEL
     # ---------------------------------------------------------------
 
     try:
 
-        response = _client.models.generate_content(
-            model=SYNTHESIS_MODEL,
-            contents=prompt,
+        response = _generate_with_retry(
+            PRIMARY_MODEL,
+            prompt
         )
 
-    except Exception as exc:
+        model_used = PRIMARY_MODEL
 
-        raise RuntimeError(
-            f"Gemini synthesis request failed: {exc}"
-        ) from exc
+    except Exception as primary_error:
+
+        print(
+            "Primary Gemini model failed."
+        )
+
+        print(
+            f"Primary error: {primary_error}"
+        )
+
+        # -----------------------------------------------------------
+        # FALLBACK MODEL
+        # -----------------------------------------------------------
+
+        try:
+
+            print(
+                f"Trying fallback model: "
+                f"{FALLBACK_MODEL}"
+            )
+
+            response = _generate_with_retry(
+                FALLBACK_MODEL,
+                prompt
+            )
+
+            model_used = FALLBACK_MODEL
+
+        except Exception as fallback_error:
+
+            raise RuntimeError(
+                "Both Gemini synthesis models failed. "
+                f"Primary: {primary_error}. "
+                f"Fallback: {fallback_error}"
+            ) from fallback_error
 
     # ---------------------------------------------------------------
-    # Read Gemini response
+    # READ RESPONSE
     # ---------------------------------------------------------------
 
     try:
@@ -376,40 +532,47 @@ def synthesize_insight(
     if not raw_text or not raw_text.strip():
 
         raise RuntimeError(
-            "Gemini returned an empty response."
+            f"Gemini model '{model_used}' "
+            "returned an empty response."
         )
 
     # ---------------------------------------------------------------
-    # Parse JSON
+    # PARSE JSON
     # ---------------------------------------------------------------
 
     try:
 
-        result = _extract_json(raw_text)
+        result = _extract_json(
+            raw_text
+        )
 
-    except ValueError as exc:
+    except ValueError:
 
         return {
             "insight": None,
             "evidence_used": [],
             "confidence": "low",
             "confidence_reason": (
-                "Gemini returned an output that could not be parsed "
-                "as valid JSON."
+                "Gemini returned output that "
+                "could not be parsed as valid JSON."
             ),
             "recommendation": None,
             "error": "invalid_model_output",
             "raw_output": raw_text,
+            "model_used": model_used,
         }
 
     # ---------------------------------------------------------------
-    # Normalize result
+    # NORMALIZE
     # ---------------------------------------------------------------
 
     normalized_result = _normalize_result(
         result,
         evidence
     )
+
+    # Add model information for debugging/audit
+    normalized_result["model_used"] = model_used
 
     return normalized_result
 
@@ -427,7 +590,9 @@ if __name__ == "__main__":
         "identified across the course content?"
     )
 
-    print("\nRetrieving evidence...\n")
+    print(
+        "\nRetrieving evidence...\n"
+    )
 
     try:
 
@@ -440,7 +605,9 @@ if __name__ == "__main__":
             f"Retrieved {len(evidence)} evidence pieces."
         )
 
-        print("\nSynthesizing insight...\n")
+        print(
+            "\nSynthesizing insight...\n"
+        )
 
         insight = synthesize_insight(
             test_query,
@@ -461,4 +628,6 @@ if __name__ == "__main__":
             "\nSynthesis test failed:"
         )
 
-        print(str(exc))
+        print(
+            str(exc)
+        )
