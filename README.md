@@ -1,34 +1,49 @@
-# Coursera Multimodal Intelligence Platform
+# 🎓 Coursera Multimodal Intelligence Platform
 
-A production-ready Multimodal Retrieval-Augmented Generation (RAG) and Evaluation system built with FastAPI, Streamlit, and Google Gemini API. The platform supports complex text reasoning, image and document understanding, semantic retrieval, and structured output generation.
+An end-to-end **Retrieval-Augmented Generation (RAG)** platform that brings together course-related information from multiple content sources such as **video transcripts, presentation content, quizzes, and discussion data**.
+
+The system converts the available course information into **structured text segments with modality and metadata**, generates embeddings, retrieves relevant evidence using semantic search, and uses **Google Gemini** to generate grounded responses.
+
+The goal is to help users understand **learner difficulties, confusing concepts, and course-related questions** using evidence retrieved from different course-content sources.
 
 ---
 
 ## 🌐 Live Deployments
 
-- Frontend Application (Streamlit Cloud): https://coursera-multimodal-mini-pw8grrooksyszb9wj9hmq9.streamlit.app
-- Backend API (Render): https://coursera-multimodal-mini.onrender.com
-- Interactive API Docs (Swagger UI): https://coursera-multimodal-mini.onrender.com/docs
+- **Frontend Application:** https://tejaswinipanda2007-cmyk-coursera-multimodal-mini.streamlit.app
+- **Backend API:** https://coursera-multimodal-mini.onrender.com
+- **Swagger API Documentation:** https://coursera-multimodal-mini.onrender.com/docs
 
 ---
 
 ## 🧠 What This Project Does
 
-The Coursera Multimodal Intelligence Platform processes course-related information from multiple sources and provides AI-powered answers and insights.
+Online course information is distributed across different sources such as:
 
-Users can interact with the application through a natural-language interface and, where supported, provide images or documents for multimodal understanding.
+- Video transcripts
+- Presentation/slide content represented as text
+- Quiz questions and related information
+- Discussion/forum content
 
-The platform combines:
+Instead of processing these sources separately, this project converts their usable information into a common **structured text representation** along with relevant metadata.
 
-- Text-based question answering and reasoning
-- Image understanding
-- Document understanding
-- Context retrieval and preparation
-- Retrieval-Augmented Generation (RAG)
-- Structured response generation
-- AI-powered evaluation
+A user can then ask a natural-language question such as:
 
-The system uses a decoupled frontend and backend architecture, making the application easier to develop, deploy, maintain, and scale.
+> **"What concepts are learners struggling with the most?"**
+
+The system retrieves semantically relevant course-content segments and provides them as context to Google Gemini for generating a grounded response.
+
+### Core Workflow
+
+1. Course information is prepared as structured text.
+2. Text is divided into meaningful segments/chunks.
+3. Each segment is associated with metadata such as content type and timestamp/source information where available.
+4. Gemini embeddings are generated for the text segments.
+5. ChromaDB stores the embeddings and performs semantic retrieval.
+6. Relevant evidence is retrieved for the user's query.
+7. Retrieved evidence is provided to Google Gemini.
+8. Gemini generates a context-aware response.
+9. The application presents the generated response through the Streamlit interface.
 
 ---
 
@@ -38,77 +53,134 @@ The system uses a decoupled frontend and backend architecture, making the applic
 +-------------------------------------------------------------+
 |                     User / Web Browser                      |
 +-------------------------------------------------------------+
-                               |
-                               | (1) Submits Query + File (Image/Doc)
-                               v
+                              |
+                              | (1) Natural-Language Query
+                              v
 +-------------------------------------------------------------+
 |                Streamlit Frontend Application               |
-|      (Hosted on Streamlit Cloud / Port 8501 locally)        |
+|      Interactive interface for submitting user queries      |
 +-------------------------------------------------------------+
-                               |
-                               | (2) REST API Call (HTTP POST / JSON / Multipart)
-                               v
-+-------------------------------------------------------------+
-|                     FastAPI Backend Engine                  |
-|          (Hosted on Render / Port 8000 locally)             |
-|  - Request Validation (Pydantic schemas)                    |
-|  - CORS & Error Handling Middleware                         |
-+-------------------------------------------------------------+
-                               |
-                               | (3) Context Retrieval & Payload Assembly
-                               v
-+-------------------------------------------------------------+
-|                 Multimodal Pre-Processing Layer             |
-|  - Document / Text Parsing                                  |
-|  - Image Preparation & Encoding                             |
-|  - Context Assembly for Grounded RAG                        |
-+-------------------------------------------------------------+
-                               |
-                               | (4) Multimodal Prompt Execution
-                               v
-+-------------------------------------------------------------+
-|                  Google Gemini API Gateway                  |
-|  - Multimodal Vision & Text Reasoning                       |
-|  - In-Context Evaluation & Structured Inference             |
-+-------------------------------------------------------------+
-                               |
-                               | (5) Return Structured Response / Evaluation
-                               v
+                              |
+                              | (2) API Request
+                              v
 +-------------------------------------------------------------+
 |                     FastAPI Backend Engine                  |
-|  - Formats output JSON & status checks                      |
+|          Handles API requests and application logic         |
 +-------------------------------------------------------------+
-                               |
-                               | (6) Render UI Components
-                               v
+                              |
+                              | (3) Query Processing
+                              v
 +-------------------------------------------------------------+
-|             Streamlit Frontend (Response to User)           |
-|  - Rendered Markdown, Confidence, and Source Context        |
+|              Text & Metadata Processing Layer              |
+|  - Structured text segments                                 |
+|  - Content-type metadata                                    |
+|  - Source / timestamp metadata where available             |
++-------------------------------------------------------------+
+                              |
+                              | (4) Semantic Search
+                              v
++-------------------------------------------------------------+
+|                         ChromaDB                            |
+|             Vector Storage & Similarity Retrieval           |
++-------------------------------------------------------------+
+                              |
+                              | (5) Relevant Evidence
+                              v
++-------------------------------------------------------------+
+|                    Google Gemini API                        |
+|       Context-based Response Generation / Synthesis         |
++-------------------------------------------------------------+
+                              |
+                              | (6) Generated Response
+                              v
++-------------------------------------------------------------+
+|                     FastAPI Backend                         |
+|              Formats and returns the response               |
++-------------------------------------------------------------+
+                              |
+                              | (7) Response Display
+                              v
++-------------------------------------------------------------+
+|                  Streamlit Frontend                         |
+|       Displays the generated answer and context             |
 +-------------------------------------------------------------+
 ```
 
-### Workflow Explanation
+### Architecture Explanation
 
-1. **User Input**
-   - The user submits a natural-language query and, where supported, an image or document through the Streamlit interface.
+#### 1. User Input
 
-2. **Streamlit Frontend**
-   - The frontend collects the input and sends it to the FastAPI backend through an HTTP request.
+The user enters a natural-language question through the Streamlit application.
 
-3. **FastAPI Backend**
-   - The backend validates the request using Pydantic schemas and handles API-level processing, CORS, and errors.
+Example:
 
-4. **Multimodal Pre-Processing**
-   - Text, documents, and images are prepared for processing, and relevant context is assembled for the RAG workflow.
+> What concepts are learners struggling with the most?
 
-5. **Google Gemini API**
-   - Gemini processes the multimodal prompt and performs reasoning based on the supplied input and retrieved or prepared context.
+#### 2. Streamlit Frontend
 
-6. **Structured Response**
-   - The FastAPI backend receives the model output, formats the response, and performs status checks before returning the result.
+Streamlit provides the interactive user interface and sends the user's query to the FastAPI backend.
 
-7. **Streamlit Response**
-   - The frontend displays the generated answer along with supported source context, confidence information, or evaluation results.
+#### 3. FastAPI Backend
+
+FastAPI receives the request and manages the application's backend/API workflow.
+
+#### 4. Text & Metadata Representation
+
+Course information from different sources is represented as structured text segments.
+
+Each segment can contain metadata such as:
+
+- Content type
+- Source information
+- Timestamp information where available
+- Other relevant metadata
+
+This text-based representation allows information from different course-content sources to participate in the same retrieval workflow.
+
+#### 5. Embeddings & Retrieval
+
+Text segments are converted into vector embeddings using the Google Gemini API.
+
+The embeddings are stored in **ChromaDB**, which performs semantic similarity search to retrieve the most relevant content for a user query.
+
+#### 6. RAG Generation
+
+The retrieved evidence is passed to Google Gemini as context.
+
+Gemini uses the retrieved context to generate a response based on the available course information.
+
+#### 7. Response
+
+The generated response is returned through the FastAPI backend and displayed to the user through the Streamlit frontend.
+
+---
+
+## 🔄 RAG Pipeline
+
+```text
+Course Content
+(Video Transcripts / Slides / Quizzes / Discussions)
+                    ↓
+          Text Preprocessing
+                    ↓
+            Text Chunking
+                    ↓
+     Structured Text + Metadata
+                    ↓
+          Gemini Embeddings
+                    ↓
+              ChromaDB
+                    ↓
+        Semantic Similarity Search
+                    ↓
+          Relevant Evidence
+                    ↓
+          Google Gemini LLM
+                    ↓
+         Grounded AI Response
+                    ↓
+          Streamlit Frontend
+```
 
 ---
 
@@ -117,215 +189,259 @@ The system uses a decoupled frontend and backend architecture, making the applic
 | Layer | Technology |
 |---|---|
 | Programming Language | Python |
-| Backend | FastAPI, Uvicorn, Pydantic |
 | Frontend | Streamlit |
-| Multimodal AI | Google Gemini API |
-| API Documentation | Swagger UI / OpenAPI |
-| Version Control | GitHub |
-| Backend Deployment | Render |
-| Frontend Deployment | Streamlit Community Cloud |
+| Backend API | FastAPI |
+| Vector Store | ChromaDB |
+| Embeddings | Google Gemini API |
+| LLM | Google Gemini API |
+| Database / Metadata | SQLite |
+| ORM / Database Layer | SQLAlchemy |
+| Deployment | Streamlit Community Cloud, Render |
+| API Documentation | Swagger UI |
+| Version Control | Git, GitHub |
 
 ---
 
 ## ✨ Key Features
 
-### 💬 Natural-Language Reasoning
-Users can submit natural-language questions and receive AI-generated responses based on the available input and context.
+### 🔎 Semantic Retrieval
 
-### 🖼️ Image Understanding
-The platform supports multimodal processing of image inputs for AI-based understanding and reasoning.
+The system retrieves relevant course-content segments based on the semantic meaning of the user's query rather than relying only on exact keyword matching.
 
-### 📄 Document Understanding
-Supported documents can be processed to allow the AI system to reason over document-based information.
+### 📚 Cross-Source Course Retrieval
 
-### 🔎 Retrieval-Augmented Generation
-Relevant information can be retrieved or prepared as context and supplied to the language model before response generation, helping keep the generated response connected to the available information.
+Information originating from different course-content sources can be represented in a common text-based format, allowing the retrieval system to search across them together.
 
-### 📊 Structured Evaluation
-The project includes structured evaluation capabilities for assessing generated outputs where enabled by the application workflow.
+### 🤖 AI-Powered Response Generation
 
-### 🔌 API-Based Architecture
-FastAPI provides a dedicated backend layer for request validation, processing, AI communication, and structured responses.
+Google Gemini generates responses using the retrieved course-content evidence as context.
 
-### 🖥️ Interactive User Interface
-Streamlit provides an interactive interface for submitting queries and displaying AI-generated results.
+### 🧩 Metadata-Aware Retrieval
 
-### ☁️ Cloud Deployment
-The backend is deployed on Render and the frontend is deployed on Streamlit Community Cloud, allowing the application to be accessed online.
+Content segments can retain metadata such as content type and timestamp/source information where available.
+
+### 🔄 Retrieval-Augmented Generation
+
+The system separates retrieval from generation:
+
+1. Retrieve relevant evidence.
+2. Provide the evidence to the LLM.
+3. Generate a response based on the retrieved context.
+
+### 🖥️ Interactive Web Interface
+
+Streamlit provides a simple interface for submitting questions and viewing generated responses.
+
+### 🔌 Decoupled Frontend and Backend
+
+The application separates the Streamlit frontend from the FastAPI backend, making the components easier to develop and deploy independently.
 
 ---
 
-## 📂 Repository Structure
+## 📂 Project Structure
 
 ```text
 Coursera-Multimodal-Mini/
 │
 ├── backend/
-│   ├── api/
-│   │   └── main.py          # FastAPI application, CORS setup, and API routes
-│   │
-│   └── ...
+│   └── api/
+│       └── main.py
 │
 ├── frontend/
-│   └── app.py               # Streamlit application
+│   └── app.py
 │
-├── requirements.txt         # Project dependencies
-└── README.md                # Project documentation
+├── requirements.txt
+├── README.md
+└── .gitignore
 ```
 
 ---
 
-## 🚀 Local Development Setup
+## 🚀 Setup & Run Locally
 
 ### 1. Clone the Repository
+
 ```bash
-git clone [https://github.com/tejaswinipanda2007-cmyk/Coursera-Multimodal-Mini.git]
-(https://github.com/tejaswinipanda2007-cmyk/Coursera-Multimodal-Mini.git)
+git clone https://github.com/tejaswinipanda2007-cmyk/Coursera-Multimodal-Mini.git
 cd Coursera-Multimodal-Mini
 ```
 
 ### 2. Create a Virtual Environment
+
 ```bash
 python -m venv venv
 ```
 
-Windows:
+### Windows
+
 ```bash
 venv\Scripts\activate
 ```
 
-macOS/Linux:
+### macOS/Linux
+
 ```bash
 source venv/bin/activate
 ```
 
 ### 3. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### 4. Configure Environment Variables
+
 Create a `.env` file in the project root:
+
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_API_KEY=your_google_gemini_api_key
 ```
 
-*Never commit your real API key to GitHub.*
+If the application requires a backend URL configuration:
 
-### 5. Start the Backend
+```env
+BACKEND_URL=http://localhost:8000
+```
+
+**Do not commit the `.env` file or real API keys to GitHub.**
+
+### 5. Start the FastAPI Backend
+
 ```bash
 uvicorn backend.api.main:app --reload
 ```
 
-- Local backend: `http://localhost:8000`
-- Swagger documentation: `http://localhost:8000/docs`
+Backend:
 
-### 6. Start the Frontend
-Open a second terminal:
+```text
+http://localhost:8000
+```
+
+Swagger documentation:
+
+```text
+http://localhost:8000/docs
+```
+
+### 6. Start the Streamlit Frontend
+
+Open another terminal:
+
 ```bash
 streamlit run frontend/app.py
 ```
 
-- Local frontend: `http://localhost:8501`
+Frontend:
+
+```text
+http://localhost:8501
+```
 
 ---
 
-## 🔌 API
+## 🔌 API Endpoints
 
-The backend exposes REST API endpoints through FastAPI.
+The project exposes backend APIs for the application's query and insight workflow.
 
-The complete list of available routes, request schemas, response schemas, and testing options can be explored through the deployed Swagger documentation:
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/query` | Runs the retrieval and response-generation workflow |
+| `GET` | `/api/insights/{id}` | Retrieves a previously generated insight |
+| `POST` | `/api/review-feedback` | Records review feedback |
+| `GET` | `/api/metrics` | Retrieves application/review metrics |
 
-Swagger UI: https://coursera-multimodal-mini.onrender.com/docs
+For interactive API testing, open:
+
+```text
+https://coursera-multimodal-mini.onrender.com/docs
+```
 
 ---
 
-## 💡 Example Use Cases
+## 💡 Example Queries
 
-- Asking questions about course-related content
-- Analyzing information contained in an image
-- Asking questions about a supported document
-- Retrieving relevant context before generating an answer
-- Generating structured AI responses
-- Evaluating generated responses
-- Understanding learner-related course information
+You can ask questions such as:
 
-### Example Queries
-
-> What concepts are learners struggling with the most?
-
-> Where are learners struggling the most in Week 1?
-
-> Which quiz questions have the lowest completion or highest failure rate?
-
-> What are the main student complaints in the discussion forum?
+- **What concepts are learners struggling with the most?**
+- **What do learners find confusing about learning rate?**
+- **Where are learners experiencing friction in the course?**
+- **Summarize the relationship between gradient descent and loss optimization.**
 
 ---
 
 ## 📊 Example Output
 
-**Query:**  
-*What concepts are learners struggling with the most?*
+### Query
 
-**Example Insight:**  
-The system retrieves relevant course content and uses the available context to generate an evidence-based response identifying concepts associated with learner difficulties.
+> What do learners find confusing about learning rate?
 
-*Note: Actual output depends on the input data, uploaded content, retrieval results, and Gemini response.*
+### Example Insight
+
+> Learners appear to be confusing learning rate with the number of training epochs. Relevant evidence can be traced to lecture and assessment content discussing optimization.
+
+### Example Recommendation
+
+> Clarify the distinction between learning rate and epochs using a simple explanation in the relevant lecture section.
+
+> **Note:** This is an illustrative example of the type of response the system is designed to generate. Actual output depends on the indexed course data and retrieved evidence.
 
 ---
 
 ## 🎯 Design Decisions
 
-### Multimodal Input
-The system is designed to work with multiple input types, including text and supported image/document inputs.
+### Text-Based Multimodal Representation
 
-### Retrieval Before Generation
-Where retrieval is used, relevant information is prepared as context before the generation step. This helps the model produce responses that are more closely connected to the available source information.
+Although the project works with information originating from different sources such as video transcripts, slides, quizzes, and discussions, the usable content is represented as **structured text segments with metadata**.
 
-### Decoupled Frontend and Backend
-Streamlit handles the user interface, while FastAPI handles backend processing and API communication. This allows both components to be developed and deployed independently.
+This design allows the system to perform cross-source semantic retrieval without requiring a separate computer-vision pipeline.
 
-### API-First Backend
-FastAPI exposes documented API routes through OpenAPI/Swagger, making the backend easier to test and integrate with other clients.
+### Vector Retrieval
 
-### Cloud-Based Deployment
-The backend and frontend are hosted as separate services using Render and Streamlit Community Cloud respectively.
+**ChromaDB** is used as the vector store for semantic similarity search over embedded course-content segments.
+
+### Gemini Embeddings
+
+Google Gemini is used to generate embeddings for the structured text content.
+
+### LLM-Based Synthesis
+
+Retrieved evidence is passed to Google Gemini to generate a response based on the available context.
+
+### Structured Application Architecture
+
+**FastAPI** handles backend/API responsibilities, while **Streamlit** provides the interactive user interface.
 
 ---
 
-## 🔒 Security & Best Practices
+## 🔒 Security
 
-- Sensitive credentials such as Gemini API keys are managed through environment variables.
-- Real API keys should never be committed to version control.
-- `.env` files should be excluded from Git tracking.
-- CORS configuration should be reviewed before production use.
-- Error handling is implemented at the API layer.
-- The frontend and backend are deployed as separate services.
-- GitHub-based deployment can automatically redeploy configured services after changes are pushed to the main branch.
+- API credentials are stored using environment variables.
+- `.env` should be excluded from version control using `.gitignore`.
+- Real API keys should never be committed to the repository.
+- `.env.example` can be used to document required environment variables without exposing credentials.
 
 ---
 
 ## ⚠️ Limitations
 
-- AI-generated responses depend on the quality and completeness of the provided or retrieved information.
-- Multimodal understanding depends on the capabilities and limitations of the selected Gemini model.
-- Evaluation results should be interpreted as supporting information rather than absolute ground truth.
-- Production-scale usage may require additional authentication, monitoring, rate limiting, and database infrastructure.
-- Response quality may vary depending on the complexity of the input and available context.
+- The current implementation uses **structured text representations** rather than direct computer-vision processing of raw images or videos.
+- Presentation/slide information is handled through its available text representation rather than image understanding.
+- The quality of generated responses depends on the quality and coverage of the indexed course content.
+- Sample data may not represent the complexity of a production-scale learning platform.
+- LLM-generated responses should be reviewed before being used for important instructional decisions.
 
 ---
 
 ## 🚀 Future Improvements
 
-- Add authentication and role-based access control.
+- Add richer processing for native video and image/slide content.
 - Improve retrieval using hybrid search and reranking.
-- Add more comprehensive automated evaluation metrics.
-- Introduce persistent production-grade database storage.
-- Add monitoring, logging, and observability.
-- Improve document and image processing pipelines.
-- Add automated API and retrieval test coverage.
-- Improve scalability for larger datasets and concurrent users.
-- Add richer analytics for learner-friction detection.
+- Expand evaluation using retrieval and answer-quality metrics.
+- Add authentication and role-based access control.
+- Move from SQLite to a production-grade PostgreSQL setup.
+- Introduce monitoring and observability.
+- Improve learner-friction detection using dedicated analytics and ML models.
 
 ---
 
@@ -333,4 +449,21 @@ The backend and frontend are hosted as separate services using Render and Stream
 
 **Tejaswini Panda**
 
-Built as an individual project to explore **Generative AI, Multimodal AI, RAG, semantic retrieval, FastAPI backend development, cloud deployment, and interactive Streamlit applications**.
+Built as an individual project to explore:
+
+- Retrieval-Augmented Generation (RAG)
+- Semantic Retrieval
+- Generative AI
+- Vector Databases
+- Backend API Development
+- Interactive AI Applications
+
+---
+
+## 📌 Important Implementation Note
+
+This project uses the term **"multimodal"** because it brings together information originating from multiple course-content sources/modalities.
+
+The current implementation does **not** perform direct image understanding, raw document/image upload processing, or computer-vision analysis.
+
+Instead, the usable information from these sources is represented as **structured text + metadata** and processed through the same semantic retrieval and RAG pipeline.
