@@ -50,7 +50,7 @@ _client = genai.Client(api_key=API_KEY) if API_KEY else None
 # GEMINI MODEL
 # -------------------------------------------------------------------
 
-SYNTHESIS_MODEL = "gemini-3.6-flash"
+SYNTHESIS_MODEL = "gemini-3.5-flash"
 
 
 # -------------------------------------------------------------------
